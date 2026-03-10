@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": ["Bash(git status)", "Read"],
+    "deny": ["Bash(rm -rf *)"]
+  },
+  "env": {
+    "CLAUDE_CODE_ENABLE_SANDBOX": "true"
+  }
+}

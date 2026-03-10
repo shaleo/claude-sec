@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": ["Bash(git:*)"],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "echo 'checking bash'"}]
+      }
+    ]
+  }
+}

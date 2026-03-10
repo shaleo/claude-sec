@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["@anthropic-ai/chrome-devtools-mcp@latest"]
+    },
+    "pinned-server": {
+      "command": "npx",
+      "args": ["some-mcp-server@1.2.3"]
+    }
+  }
+}

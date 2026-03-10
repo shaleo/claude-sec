@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code Security Report</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f8f9fa; --bg3: #e9ecef;
+    --fg: #212529; --fg2: #495057; --fg3: #868e96;
+    --border: #dee2e6;
+    --accent: #4263eb; --accent-bg: #edf2ff;
+    --green: #2b8a3e; --green-bg: #ebfbee;
+    --yellow: #e67700; --yellow-bg: #fff9db;
+    --orange: #d9480f; --orange-bg: #fff4e6;
+    --red: #c92a2a; --red-bg: #fff5f5;
+    --blue: #1864ab; --blue-bg: #e7f5ff;
+    --radius: 8px;
+    --sidebar-width: 380px;
+  }
+  [data-theme="dark"] {
+    --bg: #1a1b26; --bg2: #24283b; --bg3: #343b58;
+    --fg: #c0caf5; --fg2: #a9b1d6; --fg3: #565f89;
+    --border: #343b58;
+    --accent: #7aa2f7; --accent-bg: #1e2440;
+    --green: #9ece6a; --green-bg: #1a2e1a;
+    --yellow: #e0af68; --yellow-bg: #2e2a1a;
+    --orange: #ff9e64; --orange-bg: #2e1f1a;
+    --red: #f7768e; --red-bg: #2e1a1a;
+    --blue: #7dcfff; --blue-bg: #1a2530;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--fg);
+    line-height: 1.6; max-width: 960px; margin: 0 auto; padding: 2rem 1rem;
+  }
+  header { text-align: center; margin-bottom: 2rem; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.3rem; margin: 1.5rem 0 0.75rem; color: var(--fg); }
+  .meta { color: var(--fg3); font-size: 0.85rem; }
+  .controls { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; margin: 1.5rem 0; }
+  .controls button {
+    border: 1px solid var(--border); background: var(--bg2); color: var(--fg);
+    padding: 0.4rem 0.8rem; border-radius: var(--radius); cursor: pointer; font-size: 0.85rem;
+  }
+  .controls button:hover, .controls button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .overall-grade {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 80px; height: 80px; border-radius: 50%;
+    font-size: 2.5rem; font-weight: 700; margin: 1rem 0;
+  }
+  .overall-score { font-size: 1.2rem; color: var(--fg2); }
+  .grade-A { background: var(--green-bg); color: var(--green); border: 3px solid var(--green); }
+  .grade-B { background: var(--blue-bg); color: var(--blue); border: 3px solid var(--blue); }
+  .grade-C { background: var(--yellow-bg); color: var(--yellow); border: 3px solid var(--yellow); }
+  .grade-D { background: var(--orange-bg); color: var(--orange); border: 3px solid var(--orange); }
+  .grade-F { background: var(--red-bg); color: var(--red); border: 3px solid var(--red); }
+
+  /* Sidebar */
+  .sidebar-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 99;
+  }
+  .sidebar-overlay.open { display: block; }
+  .sidebar {
+    position: fixed; top: 0; right: -100%; width: var(--sidebar-width); max-width: 90vw;
+    height: 100vh; background: var(--bg); border-left: 1px solid var(--border);
+    z-index: 100; overflow-y: auto; padding: 1.5rem;
+    transition: right 0.3s ease;
+    box-shadow: -4px 0 20px rgba(0,0,0,0.1);
+  }
+  .sidebar.open { right: 0; }
+  .sidebar-close {
+    position: absolute; top: 0.75rem; right: 0.75rem;
+    background: none; border: none; font-size: 1.5rem; cursor: pointer;
+    color: var(--fg3); line-height: 1; padding: 0.25rem;
+  }
+  .sidebar-close:hover { color: var(--fg); }
+  .sidebar h2 { margin-top: 0; }
+  .sidebar h2:not(:first-of-type) { margin-top: 1.5rem; }
+
+  .executive-summary {
+    background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 1rem; margin: 0.75rem 0; font-size: 0.9rem; color: var(--fg2); line-height: 1.7;
+  }
+
+  .env-table, .diff-table {
+    width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 0.5rem 0 1rem;
+  }
+  .env-table th, .diff-table th { text-align: left; color: var(--fg3); font-weight: 600; padding: 0.35rem 0.75rem; white-space: nowrap; width: 1%; }
+  .env-table td, .diff-table td { color: var(--fg2); padding: 0.35rem 0.75rem; word-break: break-all; }
+  .env-table tr, .diff-table tr { border-bottom: 1px solid var(--border); }
+
+  .diff-section { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin: 0.75rem 0; }
+  .diff-badge { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; margin-right: 0.3rem; }
+  .diff-new { background: var(--red-bg); color: var(--red); }
+  .diff-resolved { background: var(--green-bg); color: var(--green); }
+  .diff-unchanged { background: var(--bg3); color: var(--fg3); }
+  .diff-delta-positive { color: var(--green); font-weight: 600; }
+  .diff-delta-negative { color: var(--red); font-weight: 600; }
+  .diff-list { list-style: none; padding: 0; margin: 0.5rem 0; font-size: 0.85rem; }
+  .diff-list li { padding: 0.2rem 0; color: var(--fg2); }
+
+  .category {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden;
+  }
+  .category-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 1rem 1.2rem; cursor: pointer; user-select: none;
+  }
+  .category-header:hover { background: var(--bg3); }
+  .category-title { font-weight: 600; font-size: 1.1rem; text-transform: capitalize; }
+  .category-meta { display: flex; gap: 1rem; align-items: center; }
+  .category-grade {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    font-weight: 700; font-size: 0.9rem;
+  }
+  .category-score { color: var(--fg3); font-size: 0.85rem; }
+  .category-body { padding: 0 1.2rem 1rem; display: none; }
+  .category.open .category-body { display: block; }
+  .category-header .arrow { transition: transform 0.2s; }
+  .category.open .category-header .arrow { transform: rotate(90deg); }
+  .finding {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1rem; margin-top: 0.75rem;
+    border-left: 4px solid var(--border);
+  }
+  .finding[data-severity="CRITICAL"] { border-left-color: var(--red); }
+  .finding[data-severity="HIGH"] { border-left-color: var(--orange); }
+  .finding[data-severity="MEDIUM"] { border-left-color: var(--yellow); }
+  .finding[data-severity="LOW"] { border-left-color: var(--blue); }
+  .finding[data-severity="INFO"] { border-left-color: var(--fg3); }
+  .finding-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .finding-id { font-family: monospace; font-size: 0.75rem; color: var(--fg3); background: var(--bg3); padding: 0.1rem 0.4rem; border-radius: 3px; }
+  .severity-badge {
+    font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem;
+    border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .severity-CRITICAL { background: var(--red-bg); color: var(--red); }
+  .severity-HIGH { background: var(--orange-bg); color: var(--orange); }
+  .severity-MEDIUM { background: var(--yellow-bg); color: var(--yellow); }
+  .severity-LOW { background: var(--blue-bg); color: var(--blue); }
+  .severity-INFO { background: var(--bg3); color: var(--fg3); }
+  .finding-title { font-weight: 600; }
+  .finding-desc { color: var(--fg2); margin-bottom: 0.5rem; font-size: 0.9rem; }
+  .compliance-tags { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+  .compliance-tag {
+    font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.4rem;
+    border-radius: 3px; background: var(--accent-bg); color: var(--accent);
+    cursor: help; text-decoration: none;
+  }
+  a.compliance-tag { cursor: pointer; }
+  a.compliance-tag:hover { background: var(--accent); color: #fff; }
+  .remediation { display: none; margin-top: 0.75rem; }
+  .finding.open .remediation { display: block; }
+  .remediation-toggle {
+    background: none; border: none; color: var(--accent);
+    cursor: pointer; font-size: 0.85rem; padding: 0;
+  }
+  .remediation-toggle:hover { text-decoration: underline; }
+  .remediation dt { font-weight: 600; font-size: 0.85rem; color: var(--fg2); margin-top: 0.5rem; }
+  .remediation dd { font-size: 0.85rem; color: var(--fg2); margin-left: 0; padding: 0.25rem 0.75rem; background: var(--bg2); border-radius: 4px; margin-top: 0.25rem; white-space: pre-wrap; word-break: break-word; }
+  .tracking-fields { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border); display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.8rem; }
+  .tracking-field label { font-weight: 600; color: var(--fg3); margin-right: 0.25rem; }
+  .tracking-field span { color: var(--fg2); }
+  .no-findings { color: var(--green); font-size: 0.9rem; padding: 0.5rem 0; }
+  footer { text-align: center; color: var(--fg3); font-size: 0.8rem; margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .hidden { display: none !important; }
+
+  /* Print-friendly styles: sidebar renders inline */
+  @media print {
+    body { max-width: 100%; padding: 0.5cm; font-size: 10pt; color: #000; background: #fff; }
+    [data-theme="dark"] { --bg: #fff; --bg2: #f8f9fa; --bg3: #e9ecef; --fg: #000; --fg2: #333; --fg3: #666; --border: #ccc; --accent: #4263eb; --accent-bg: #edf2ff; }
+    .controls, #theme-toggle { display: none !important; }
+    .sidebar-overlay { display: none !important; }
+    .sidebar {
+      position: static !important; right: auto !important; width: 100% !important;
+      max-width: 100% !important; height: auto !important; border: none !important;
+      box-shadow: none !important; padding: 0 !important; overflow: visible !important;
+      display: block !important;
+    }
+    .sidebar-close { display: none !important; }
+    .category { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ccc; }
+    .category-body { display: block !important; }
+    .category-header { cursor: default; }
+    .category-header .arrow { display: none; }
+    .finding { break-inside: avoid; page-break-inside: avoid; }
+    .remediation { display: block !important; }
+    .remediation-toggle { display: none; }
+    .tracking-fields { display: flex !important; }
+    .overall-grade { border: 3px solid #000; }
+    .grade-A { color: #2b8a3e; border-color: #2b8a3e; }
+    .grade-B { color: #1864ab; border-color: #1864ab; }
+    .grade-C { color: #e67700; border-color: #e67700; }
+    .grade-D { color: #d9480f; border-color: #d9480f; }
+    .grade-F { color: #c92a2a; border-color: #c92a2a; }
+    a { color: #000; text-decoration: none; }
+    header { margin-bottom: 1rem; }
+    h1 { font-size: 16pt; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar overlay -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<!-- Sliding sidebar with Executive Summary & Environment -->
+<aside class="sidebar" id="sidebar">
+  <button class="sidebar-close" id="sidebar-close" aria-label="Close sidebar">&times;</button>
+
+  {% if result.overall_summary %}
+  <h2>Executive Summary</h2>
+  <div class="executive-summary">{{ result.overall_summary }}</div>
+  {% endif %}
+
+  {% if result.environment.hostname %}
+  <h2>Environment</h2>
+  <table class="env-table">
+    <tr><th>Hostname</th><td>{{ result.environment.hostname }}</td></tr>
+    <tr><th>OS</th><td>{{ result.environment.os_version }}</td></tr>
+    <tr><th>User</th><td>{{ result.environment.username }}</td></tr>
+    <tr><th>Python</th><td>{{ result.environment.python_version }}</td></tr>
+    <tr><th>claude-sec</th><td>{{ result.environment.claude_sec_version }}</td></tr>
+    <tr><th>Project Dir</th><td>{{ result.environment.project_dir }}</td></tr>
+  </table>
+  {% endif %}
+
+  {% if result.paths_scanned %}
+  <h2>Paths Scanned</h2>
+  <ul style="font-size:0.85rem;color:var(--fg3);padding-left:1.2rem;">
+    {% for p in result.paths_scanned %}<li>{{ p }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+</aside>
+
+<header>
+  <h1>Claude Code Security Report</h1>
+  <div class="meta">Generated: {{ result.timestamp }}</div>
+  <div class="overall-grade grade-{{ result.overall_grade }}">{{ result.overall_grade }}</div>
+  <div class="overall-score">Overall Score: {{ result.overall_score }} / 100</div>
+</header>
+
+{% if result.diff %}
+<h2>Changes Since Last Scan</h2>
+<div class="diff-section">
+  <table class="diff-table">
+    <tr>
+      <th>Previous Grade</th>
+      <td>{{ result.diff.previous_grade }} ({{ result.diff.previous_score }}/100)</td>
+    </tr>
+    <tr>
+      <th>Score Change</th>
+      <td>
+        {% if result.diff.score_delta > 0 %}
+          <span class="diff-delta-positive">+{{ result.diff.score_delta }} (improved)</span>
+        {% elif result.diff.score_delta < 0 %}
+          <span class="diff-delta-negative">{{ result.diff.score_delta }} (regressed)</span>
+        {% else %}
+          <span>No change</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr><th>Unchanged</th><td>{{ result.diff.unchanged_count }} finding(s)</td></tr>
+  </table>
+  {% if result.diff.new_findings %}
+  <div style="margin-top:0.5rem;">
+    <span class="diff-badge diff-new">NEW</span> <strong>{{ result.diff.new_findings|length }} new finding(s)</strong>
+    <ul class="diff-list">
+      {% for fid in result.diff.new_findings %}<li>{{ fid }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if result.diff.resolved_findings %}
+  <div style="margin-top:0.5rem;">
+    <span class="diff-badge diff-resolved">RESOLVED</span> <strong>{{ result.diff.resolved_findings|length }} resolved finding(s)</strong>
+    <ul class="diff-list">
+      {% for title in result.diff.resolved_findings %}<li>{{ title }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% if not result.diff.new_findings and not result.diff.resolved_findings %}
+  <div style="margin-top:0.5rem;"><span class="diff-badge diff-unchanged">NO CHANGES</span> All findings unchanged since last scan.</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="controls">
+  <button id="sidebar-toggle">Summary &amp; Info</button>
+  <button class="filter-btn active" data-filter="all">All</button>
+  <button class="filter-btn" data-filter="CRITICAL">Critical</button>
+  <button class="filter-btn" data-filter="HIGH">High</button>
+  <button class="filter-btn" data-filter="MEDIUM">Medium</button>
+  <button class="filter-btn" data-filter="LOW">Low</button>
+  <button class="filter-btn" data-filter="INFO">Info</button>
+  <button id="theme-toggle">Toggle Dark Mode</button>
+</div>
+
+{% for cat_name, cat in result.categories.items() %}
+<div class="category">
+  <div class="category-header" onclick="this.parentElement.classList.toggle('open')">
+    <span class="category-title">{{ cat_name }}</span>
+    <div class="category-meta">
+      <span class="category-score">{{ cat.score }}/100</span>
+      <span class="category-grade grade-{{ cat.grade }}">{{ cat.grade }}</span>
+      <span class="arrow">&#9654;</span>
+    </div>
+  </div>
+  <div class="category-body">
+    {% if cat.findings %}
+      {% for f in cat.findings %}
+      <div class="finding" data-severity="{{ f.severity.name }}">
+        <div class="finding-header">
+          <span class="finding-id">{{ f.finding_id }}</span>
+          <span class="severity-badge severity-{{ f.severity.name }}">{{ f.severity.name }}</span>
+          <span class="finding-title">{{ f.title }}</span>
+        </div>
+        {% if f.compliance %}
+        <div class="compliance-tags">
+          {% for ref in f.compliance %}
+          {% if ref.url %}
+          <a class="compliance-tag" href="{{ ref.url }}" target="_blank" rel="noopener" title="{{ ref.framework }}: {{ ref.description }}">{{ ref.reference }}</a>
+          {% else %}
+          <span class="compliance-tag" title="{{ ref.framework }}: {{ ref.description }}">{{ ref.reference }}</span>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="finding-desc">{{ f.description }}</div>
+        <button class="remediation-toggle" onclick="this.closest('.finding').classList.toggle('open')">Show remediation</button>
+        <div class="remediation">
+          <dl>
+            <dt>Risk</dt><dd>{{ f.risk }}</dd>
+            <dt>Fix</dt><dd>{{ f.fix }}</dd>
+            <dt>Verification</dt><dd>{{ f.verification }}</dd>
+          </dl>
+          <div class="tracking-fields">
+            <div class="tracking-field"><label>Status:</label> <span>{{ f.status }}</span></div>
+            <div class="tracking-field"><label>Assigned To:</label> <span>{{ f.assigned_to or '_______________' }}</span></div>
+            <div class="tracking-field"><label>Target Date:</label> <span>{{ f.target_date or '___/___/______' }}</span></div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="no-findings">No issues found. All checks passed.</div>
+    {% endif %}
+  </div>
+</div>
+{% endfor %}
+
+<footer>claude-sec v{{ result.environment.claude_sec_version }} &mdash; Claude Code Security Dashboard</footer>
+
+<script>
+(function() {
+  var sidebar = document.getElementById('sidebar');
+  var overlay = document.getElementById('sidebar-overlay');
+  function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('open'); }
+  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+  document.getElementById('sidebar-toggle').addEventListener('click', function() {
+    sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+  });
+  document.getElementById('sidebar-close').addEventListener('click', closeSidebar);
+  overlay.addEventListener('click', closeSidebar);
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeSidebar(); });
+})();
+document.querySelectorAll('.filter-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var filter = btn.dataset.filter;
+    document.querySelectorAll('.finding').forEach(function(f) {
+      if (filter === 'all' || f.dataset.severity === filter) {
+        f.classList.remove('hidden');
+      } else {
+        f.classList.add('hidden');
+      }
+    });
+  });
+});
+document.getElementById('theme-toggle').addEventListener('click', function() {
+  var html = document.documentElement;
+  html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+});
+</script>
+</body>
+</html>
